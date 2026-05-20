@@ -157,7 +157,7 @@ else
 {
   "base_url": "https://validatorsclock.xyz",
   "chain": "ton",
-  "interval_secs": 60,
+  "interval_secs": 300,
   "full_geo_refresh_secs": 3600,
   "state": "$RUNTIME_DIR/ton_nodes_state.json",
   "output": "$MAP_DIR/ton_full.json",

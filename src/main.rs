@@ -112,7 +112,7 @@ struct CollectLoopArgs {
     #[command(flatten)]
     collect: CollectArgs,
 
-    #[arg(long, default_value_t = 60)]
+    #[arg(long, default_value_t = 300)]
     interval_secs: u64,
 
     #[arg(long, default_value_t = 3600)]
@@ -306,7 +306,7 @@ fn default_geo_batch_size() -> usize {
 }
 
 fn default_interval_secs() -> u64 {
-    60
+    300
 }
 
 fn default_full_geo_refresh_secs() -> u64 {
@@ -699,7 +699,7 @@ mod tests {
         let config: AddressResolverConfig = serde_json::from_str(
             r#"{
                 "chain": "ton",
-                "interval_secs": 60,
+                "interval_secs": 300,
                 "full_geo_refresh_secs": 3600,
                 "state": "state/ton_nodes_state.json",
                 "output": "out/ton_full.json",
