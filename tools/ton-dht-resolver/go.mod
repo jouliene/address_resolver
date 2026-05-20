@@ -1,6 +1,6 @@
 module address_resolver/tools/ton-dht-resolver
 
-go 1.25
+go 1.23.0
 
 require github.com/xssnick/tonutils-go v1.14.0
 

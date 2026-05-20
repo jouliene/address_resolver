@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 START_SERVICE=0
+MIN_GO_VERSION="1.23.0"
+GO_VERSION="${ADDRESS_RESOLVER_GO_VERSION:-1.23.0}"
 for arg in "$@"; do
   case "$arg" in
     --start)
@@ -51,6 +53,10 @@ install_apt_packages() {
   run_privileged apt-get install -y --no-install-recommends "$@"
 }
 
+version_ge() {
+  [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n 1)" == "$2" ]]
+}
+
 ensure_rust() {
   if command -v rustup >/dev/null; then
     echo "updating Rust toolchain"
@@ -74,12 +80,41 @@ ensure_rust() {
 
 ensure_go() {
   if command -v go >/dev/null; then
-    echo "using existing Go toolchain: $(go version)"
-    return
+    local current
+    current="$(go version | awk '{print $3}' | sed 's/^go//')"
+    if version_ge "$current" "$MIN_GO_VERSION"; then
+      echo "using existing Go toolchain: $(go version)"
+      return
+    fi
+    echo "Go $current is too old; installing Go $GO_VERSION"
+  else
+    echo "installing Go toolchain"
   fi
 
-  echo "installing Go toolchain"
-  install_apt_packages ca-certificates build-essential pkg-config golang-go
+  install_apt_packages ca-certificates curl tar
+
+  local arch
+  case "$(uname -m)" in
+    x86_64|amd64)
+      arch="amd64"
+      ;;
+    aarch64|arm64)
+      arch="arm64"
+      ;;
+    *)
+      echo "unsupported Go install architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  local tmp
+  tmp="$(mktemp -d)"
+
+  curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${arch}.tar.gz" -o "$tmp/go.tgz"
+  run_privileged rm -rf /usr/local/go
+  run_privileged tar -C /usr/local -xzf "$tmp/go.tgz"
+  rm -rf "$tmp"
+  export PATH="/usr/local/go/bin:$PATH"
 
   command -v go >/dev/null || {
     echo "go is still missing after Go setup" >&2

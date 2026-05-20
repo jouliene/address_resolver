@@ -82,8 +82,8 @@ cd address_resolver
 named `address-resolver-ton.service` when systemd is available.
 
 It also installs missing build dependencies. Rust is installed or updated
-through `rustup`; Go is installed through `apt-get` on Debian/Ubuntu when `go`
-is missing.
+through `rustup`. Go is installed from the official Go Linux tarball when `go`
+is missing or older than the version required by `tonutils-go`.
 
 Default generated paths:
 
