@@ -15,7 +15,8 @@ use tokio::{io::AsyncWriteExt, process::Command, time::timeout};
 
 use crate::model::{AddressListMetadata, Resolution, ResolvedAddress};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ResolverKind {
     None,
     Command,
@@ -33,6 +34,12 @@ impl ResolverKind {
 
     pub fn attempted_network_resolution(self) -> bool {
         matches!(self, Self::Command | Self::TonDht)
+    }
+}
+
+impl Default for ResolverKind {
+    fn default() -> Self {
+        Self::None
     }
 }
 

@@ -40,6 +40,7 @@ struct Cli {
 enum Commands {
     Collect(CollectArgs),
     CollectLoop(CollectLoopArgs),
+    Run(RunArgs),
 }
 
 #[derive(Clone, Debug, Args)]
@@ -117,6 +118,184 @@ struct CollectLoopArgs {
     once: bool,
 }
 
+#[derive(Debug, Args)]
+struct RunArgs {
+    #[arg(short, long, default_value = "address_resolver.json")]
+    config: PathBuf,
+
+    #[arg(long)]
+    once: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AddressResolverConfig {
+    #[serde(default = "default_base_url")]
+    base_url: String,
+    #[serde(default = "default_chain")]
+    chain: String,
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    resolver: ResolverConfig,
+    #[serde(default)]
+    output: Option<PathBuf>,
+    #[serde(default)]
+    map_output: Option<PathBuf>,
+    #[serde(default)]
+    geo: GeoConfig,
+    #[serde(default)]
+    compact: bool,
+    #[serde(default = "default_interval_secs")]
+    interval_secs: u64,
+    #[serde(default = "default_full_geo_refresh_secs")]
+    full_geo_refresh_secs: u64,
+    #[serde(default)]
+    state: Option<PathBuf>,
+    #[serde(default)]
+    once: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResolverConfig {
+    #[serde(default)]
+    kind: ResolverKind,
+    #[serde(default)]
+    command: Option<PathBuf>,
+    #[serde(default, alias = "args")]
+    command_args: Vec<String>,
+    #[serde(default = "default_command_timeout_secs")]
+    command_timeout_secs: u64,
+    #[serde(default = "default_ton_config_url")]
+    ton_config_url: String,
+    #[serde(default = "default_ton_workers")]
+    ton_workers: usize,
+    #[serde(default = "default_ton_batch_timeout_secs")]
+    ton_batch_timeout_secs: u64,
+    #[serde(default = "default_ton_lookup_timeout_secs")]
+    ton_lookup_timeout_secs: u64,
+}
+
+impl Default for ResolverConfig {
+    fn default() -> Self {
+        Self {
+            kind: ResolverKind::None,
+            command: None,
+            command_args: Vec::new(),
+            command_timeout_secs: default_command_timeout_secs(),
+            ton_config_url: default_ton_config_url(),
+            ton_workers: default_ton_workers(),
+            ton_batch_timeout_secs: default_ton_batch_timeout_secs(),
+            ton_lookup_timeout_secs: default_ton_lookup_timeout_secs(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GeoConfig {
+    #[serde(default = "default_geo_endpoint")]
+    endpoint: String,
+    #[serde(default = "default_geo_batch_size")]
+    batch_size: usize,
+    #[serde(default)]
+    cache: Option<PathBuf>,
+}
+
+impl AddressResolverConfig {
+    fn to_collect_loop_args(&self, config_path: &Path) -> CollectLoopArgs {
+        let base_dir = config_base_dir(config_path);
+
+        CollectLoopArgs {
+            collect: CollectArgs {
+                chain: self.chain.clone(),
+                limit: self.limit,
+                resolver: self.resolver.kind,
+                command: self
+                    .resolver
+                    .command
+                    .as_ref()
+                    .map(|path| resolve_config_path(&base_dir, path)),
+                command_args: self.resolver.command_args.clone(),
+                command_timeout_secs: self.resolver.command_timeout_secs,
+                ton_config_url: self.resolver.ton_config_url.clone(),
+                ton_workers: self.resolver.ton_workers,
+                ton_batch_timeout_secs: self.resolver.ton_batch_timeout_secs,
+                ton_lookup_timeout_secs: self.resolver.ton_lookup_timeout_secs,
+                output: self
+                    .output
+                    .as_ref()
+                    .map(|path| resolve_config_path(&base_dir, path)),
+                geo: false,
+                geo_endpoint: self.geo.endpoint.clone(),
+                geo_batch_size: self.geo.batch_size,
+                geo_cache: self
+                    .geo
+                    .cache
+                    .as_ref()
+                    .map(|path| resolve_config_path(&base_dir, path)),
+                map_output: self
+                    .map_output
+                    .as_ref()
+                    .map(|path| resolve_config_path(&base_dir, path)),
+                compact: self.compact,
+            },
+            interval_secs: self.interval_secs,
+            full_geo_refresh_secs: self.full_geo_refresh_secs,
+            state: self
+                .state
+                .as_ref()
+                .map(|path| resolve_config_path(&base_dir, path)),
+            once: self.once,
+        }
+    }
+}
+
+fn default_base_url() -> String {
+    "https://validatorsclock.xyz".to_owned()
+}
+
+fn default_chain() -> String {
+    "ton".to_owned()
+}
+
+fn default_command_timeout_secs() -> u64 {
+    10
+}
+
+fn default_ton_config_url() -> String {
+    "https://ton-blockchain.github.io/global.config.json".to_owned()
+}
+
+fn default_ton_workers() -> usize {
+    8
+}
+
+fn default_ton_batch_timeout_secs() -> u64 {
+    300
+}
+
+fn default_ton_lookup_timeout_secs() -> u64 {
+    20
+}
+
+fn default_geo_endpoint() -> String {
+    DEFAULT_GEO_ENDPOINT.to_owned()
+}
+
+fn default_geo_batch_size() -> usize {
+    100
+}
+
+fn default_interval_secs() -> u64 {
+    60
+}
+
+fn default_full_geo_refresh_secs() -> u64 {
+    3600
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 struct CollectRunOptions {
     force_geo_refresh: bool,
@@ -164,6 +343,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Collect(args) => collect(cli.base_url, args).await,
         Commands::CollectLoop(args) => collect_loop(cli.base_url, args).await,
+        Commands::Run(args) => run_from_config(args).await,
     }
 }
 
@@ -258,6 +438,17 @@ async fn collect_loop(base_url: String, args: CollectLoopArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn run_from_config(args: RunArgs) -> Result<()> {
+    let config = load_config_file(&args.config)?;
+    let mut loop_args = config.to_collect_loop_args(&args.config);
+
+    if args.once {
+        loop_args.once = true;
+    }
+
+    collect_loop(config.base_url, loop_args).await
 }
 
 async fn run_collect(
@@ -416,6 +607,28 @@ fn save_collector_state(path: Option<&Path>, state: &CollectorState) -> Result<(
     write_json(path, &json)
 }
 
+fn load_config_file(path: &Path) -> Result<AddressResolverConfig> {
+    let json = fs::read_to_string(path)
+        .with_context(|| format!("failed to read config {}", path.display()))?;
+    serde_json::from_str(&json)
+        .with_context(|| format!("failed to parse config {}", path.display()))
+}
+
+fn config_base_dir(path: &Path) -> PathBuf {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
+}
+
+fn resolve_config_path(base_dir: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base_dir.join(path)
+    }
+}
+
 fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -441,4 +654,58 @@ fn write_json(path: &Path, json: &str) -> Result<()> {
             path.display()
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_file_maps_to_loop_args_with_relative_paths() {
+        let config: AddressResolverConfig = serde_json::from_str(
+            r#"{
+                "chain": "ton",
+                "interval_secs": 60,
+                "full_geo_refresh_secs": 3600,
+                "state": "state/ton_nodes_state.json",
+                "output": "out/ton_full.json",
+                "map_output": "out/ton_nodes.json",
+                "compact": true,
+                "resolver": {
+                    "kind": "ton-dht",
+                    "command": "tools/ton-dht-resolver/ton-dht-resolver",
+                    "ton_workers": 16,
+                    "ton_batch_timeout_secs": 600,
+                    "ton_lookup_timeout_secs": 30
+                },
+                "geo": {
+                    "cache": "state/ton_geo_cache.json"
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let args = config.to_collect_loop_args(Path::new("/srv/address_resolver/config.json"));
+
+        assert_eq!(config.base_url, "https://validatorsclock.xyz");
+        assert_eq!(args.collect.chain, "ton");
+        assert_eq!(args.collect.resolver, ResolverKind::TonDht);
+        assert_eq!(args.collect.ton_workers, 16);
+        assert_eq!(
+            args.collect.command.unwrap(),
+            PathBuf::from("/srv/address_resolver/tools/ton-dht-resolver/ton-dht-resolver")
+        );
+        assert_eq!(
+            args.collect.map_output.unwrap(),
+            PathBuf::from("/srv/address_resolver/out/ton_nodes.json")
+        );
+        assert_eq!(
+            args.collect.geo_cache.unwrap(),
+            PathBuf::from("/srv/address_resolver/state/ton_geo_cache.json")
+        );
+        assert_eq!(
+            args.state.unwrap(),
+            PathBuf::from("/srv/address_resolver/state/ton_nodes_state.json")
+        );
+    }
 }

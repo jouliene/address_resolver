@@ -67,7 +67,68 @@ validator public key from the current validator set. If DHT returns multiple
 addresses for one validator, the exporter picks one canonical IP for this legacy
 file and keeps the full address list in `out/ton-full.json`.
 
-## Production TON map collector
+## Install
+
+Production install is meant to be one command after clone:
+
+```bash
+git clone <repo-url> address_resolver
+cd address_resolver
+./install.sh
+```
+
+`install.sh` builds the Rust collector, builds the Go TON DHT helper, creates
+`address_resolver.json` if it does not exist, and installs a user systemd unit
+named `address-resolver-ton.service` when systemd is available.
+
+Default generated paths:
+
+- runtime state and geo cache: `./out/runtime`
+- TON map output: `./out/ton_map/ton_nodes.json`
+- full resolver output: `./out/ton_map/ton_full.json`
+
+For a production `validators_clock` user, point the map output directory at the
+directory read by the website:
+
+```bash
+VALIDATORS_CLOCK_TON_MAP_DIR=/home/admin/.validators_clock/ton_map ./install.sh
+```
+
+To start the service immediately:
+
+```bash
+./install.sh --start
+```
+
+Or start it later:
+
+```bash
+systemctl --user enable --now address-resolver-ton.service
+```
+
+## Config-driven run
+
+Production runs should use `address_resolver.json`, not long CLI commands. The
+tracked `address_resolver.example.json` documents the schema; `install.sh`
+generates a local `address_resolver.json` with absolute paths.
+
+Run one iteration:
+
+```bash
+target/release/address_resolver run --once
+```
+
+Run forever:
+
+```bash
+target/release/address_resolver run
+```
+
+Use a non-default config:
+
+```bash
+target/release/address_resolver run --config /path/to/address_resolver.json
+```
 
 The production shape is a long-running Rust collector plus the current Go
 `tonutils-go` DHT helper:
@@ -77,39 +138,11 @@ The production shape is a long-running Rust collector plus the current Go
 - Go helper: low-level TON ADNL/DHT lookup backend, because `tonutils-go`
   already has a working network stack.
 
-Build both binaries:
-
-```bash
-cargo build --release
-cd tools/ton-dht-resolver
-GOCACHE=/tmp/address-resolver-go-build GOPATH=/tmp/address-resolver-go go build -o ton-dht-resolver .
-```
-
-Run one production-style iteration:
-
-```bash
-target/release/address_resolver collect-loop \
-  --chain ton \
-  --resolver ton-dht \
-  --command ./tools/ton-dht-resolver/ton-dht-resolver \
-  --ton-workers 16 \
-  --ton-batch-timeout-secs 600 \
-  --ton-lookup-timeout-secs 30 \
-  --output /home/admin/.validators_clock/ton_map/ton_full.json \
-  --map-output /home/admin/.validators_clock/ton_map/ton_nodes.json \
-  --geo-cache /home/tonmap/.validators_clock_map/ton_geo_cache.json \
-  --state /home/tonmap/.validators_clock_map/ton_nodes_state.json \
-  --full-geo-refresh-secs 3600 \
-  --interval-secs 60 \
-  --compact \
-  --once
-```
-
-Run it as a daemon by removing `--once`. On every iteration it rebuilds the full
-TON map from the current validator round. New IP addresses are sent to
-`ip-api.com`; known IP addresses are served from `--geo-cache`. Every
-`--full-geo-refresh-secs` seconds the collector refreshes all currently resolved
-IP addresses and stores the next refresh checkpoint in `--state`.
+On every iteration the collector rebuilds the full TON map from the current
+validator round. New IP addresses are sent to `ip-api.com`; known IP addresses
+are served from the configured geo cache. Every `full_geo_refresh_secs` seconds
+the collector refreshes all currently resolved IP addresses and stores the next
+refresh checkpoint in the configured state file.
 
 The state file is operational metadata only. If it is deleted, the next run will
 do a full geo refresh and recreate it. The map file is written atomically via a
