@@ -24,7 +24,7 @@ done
 
 ROOT="$(pwd)"
 RUNTIME_DIR="${ADDRESS_RESOLVER_RUNTIME_DIR:-$ROOT/out/runtime}"
-MAP_DIR="${VALIDATORS_CLOCK_TON_MAP_DIR:-$ROOT/out/ton_map}"
+MAP_DIR="${VALIDATORS_CLOCK_TON_MAP_DIR:-/home/admin/.validators_clock/ton_map}"
 CONFIG_PATH="${ADDRESS_RESOLVER_CONFIG:-$ROOT/address_resolver.json}"
 SERVICE_NAME="${ADDRESS_RESOLVER_SERVICE_NAME:-address-resolver-ton.service}"
 BIN="$ROOT/target/release/address_resolver"

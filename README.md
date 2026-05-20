@@ -89,14 +89,13 @@ Default generated paths:
 
 - runtime state and geo cache: `./out/runtime`
 - stable map cache: `./out/runtime/ton_map_cache.json`
-- TON map output: `./out/ton_map/ton_nodes.json`
-- full resolver output: `./out/ton_map/ton_full.json`
+- TON map output: `/home/admin/.validators_clock/ton_map/ton_nodes.json`
+- full resolver output: `/home/admin/.validators_clock/ton_map/ton_full.json`
 
-For a production `validators_clock` user, point the map output directory at the
-directory read by the website:
+To update an existing checkout and restart the user service:
 
 ```bash
-VALIDATORS_CLOCK_TON_MAP_DIR=/home/admin/.validators_clock/ton_map ./install.sh
+./update.sh
 ```
 
 To start the service immediately:
