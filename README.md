@@ -81,6 +81,10 @@ cd address_resolver
 `address_resolver.json` if it does not exist, and installs a user systemd unit
 named `address-resolver-ton.service` when systemd is available.
 
+It also installs missing build dependencies. Rust is installed or updated
+through `rustup`; Go is installed through `apt-get` on Debian/Ubuntu when `go`
+is missing.
+
 Default generated paths:
 
 - runtime state and geo cache: `./out/runtime`

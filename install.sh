@@ -20,13 +20,6 @@ for arg in "$@"; do
   esac
 done
 
-for cmd in cargo go; do
-  command -v "$cmd" >/dev/null || {
-    echo "missing command: $cmd" >&2
-    exit 1
-  }
-done
-
 ROOT="$(pwd)"
 RUNTIME_DIR="${ADDRESS_RESOLVER_RUNTIME_DIR:-$ROOT/out/runtime}"
 MAP_DIR="${VALIDATORS_CLOCK_TON_MAP_DIR:-$ROOT/out/ton_map}"
@@ -34,6 +27,79 @@ CONFIG_PATH="${ADDRESS_RESOLVER_CONFIG:-$ROOT/address_resolver.json}"
 SERVICE_NAME="${ADDRESS_RESOLVER_SERVICE_NAME:-address-resolver-ton.service}"
 BIN="$ROOT/target/release/address_resolver"
 HELPER="$ROOT/tools/ton-dht-resolver/ton-dht-resolver"
+
+export PATH="$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
+
+run_privileged() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+  elif command -v sudo >/dev/null; then
+    sudo "$@"
+  else
+    echo "missing sudo; cannot run: $*" >&2
+    exit 1
+  fi
+}
+
+install_apt_packages() {
+  if ! command -v apt-get >/dev/null; then
+    echo "automatic dependency install currently supports Debian/Ubuntu with apt-get" >&2
+    return 1
+  fi
+
+  run_privileged apt-get update
+  run_privileged apt-get install -y --no-install-recommends "$@"
+}
+
+ensure_rust() {
+  if command -v rustup >/dev/null; then
+    echo "updating Rust toolchain"
+    rustup update stable
+    rustup default stable
+  elif command -v cargo >/dev/null; then
+    echo "using existing Rust toolchain: $(cargo --version)"
+  else
+    echo "installing Rust toolchain"
+    install_apt_packages ca-certificates curl build-essential pkg-config
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --profile minimal --default-toolchain stable
+    export PATH="$HOME/.cargo/bin:$PATH"
+  fi
+
+  command -v cargo >/dev/null || {
+    echo "cargo is still missing after Rust setup" >&2
+    exit 1
+  }
+}
+
+ensure_go() {
+  if command -v go >/dev/null; then
+    echo "using existing Go toolchain: $(go version)"
+    return
+  fi
+
+  echo "installing Go toolchain"
+  install_apt_packages ca-certificates build-essential pkg-config golang-go
+
+  command -v go >/dev/null || {
+    echo "go is still missing after Go setup" >&2
+    exit 1
+  }
+}
+
+if [[ "${ADDRESS_RESOLVER_SKIP_DEPS:-0}" == "1" ]]; then
+  echo "skipping dependency setup"
+else
+  ensure_rust
+  ensure_go
+fi
+
+for cmd in cargo go; do
+  command -v "$cmd" >/dev/null || {
+    echo "missing command: $cmd" >&2
+    exit 1
+  }
+done
 
 mkdir -p "$RUNTIME_DIR" "$MAP_DIR"
 
