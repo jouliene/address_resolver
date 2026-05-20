@@ -88,6 +88,7 @@ is missing or older than the version required by `tonutils-go`.
 Default generated paths:
 
 - runtime state and geo cache: `./out/runtime`
+- stable map cache: `./out/runtime/ton_map_cache.json`
 - TON map output: `./out/ton_map/ton_nodes.json`
 - full resolver output: `./out/ton_map/ton_full.json`
 
@@ -147,6 +148,12 @@ validator round. New IP addresses are sent to `ip-api.com`; known IP addresses
 are served from the configured geo cache. Every `full_geo_refresh_secs` seconds
 the collector refreshes all currently resolved IP addresses and stores the next
 refresh checkpoint in the configured state file.
+
+The legacy map output is stabilized by `map_cache`. If a currently active TON
+validator is not found in one DHT pass, the collector keeps its last known map
+entry until `map_stale_after_secs` expires. The default is `3600` seconds, so a
+single failed lookup does not make `validators_clock` label the validator as
+`FAKE NODE`.
 
 The state file is operational metadata only. If it is deleted, the next run will
 do a full geo refresh and recreate it. The map file is written atomically via a

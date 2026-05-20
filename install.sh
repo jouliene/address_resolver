@@ -162,6 +162,8 @@ else
   "state": "$RUNTIME_DIR/ton_nodes_state.json",
   "output": "$MAP_DIR/ton_full.json",
   "map_output": "$MAP_DIR/ton_nodes.json",
+  "map_cache": "$RUNTIME_DIR/ton_map_cache.json",
+  "map_stale_after_secs": 3600,
   "compact": true,
   "resolver": {
     "kind": "ton-dht",

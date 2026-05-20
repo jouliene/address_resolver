@@ -14,13 +14,14 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand};
 use client::ValidatorsClockClient;
 use geo::{GeoCache, GeoClient};
-use map_export::{build_map_nodes, collect_resolved_ips};
+use map_export::{build_cached_map_nodes, collect_resolved_ips};
 use model::{CollectionOutput, OutputChain, ResolverMetadata, ValidatorRecord};
 use resolver::{ResolveRequest, ResolverKind, build_resolver};
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 
 const DEFAULT_GEO_ENDPOINT: &str = "http://ip-api.com/batch?fields=status,message,country,countryCode,regionName,city,lat,lon,isp,org,as,query";
+const DEFAULT_MAP_STALE_AFTER_SECS: u64 = 3600;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -97,6 +98,12 @@ struct CollectArgs {
     map_output: Option<PathBuf>,
 
     #[arg(long)]
+    map_cache: Option<PathBuf>,
+
+    #[arg(long, default_value_t = DEFAULT_MAP_STALE_AFTER_SECS)]
+    map_stale_after_secs: u64,
+
+    #[arg(long)]
     compact: bool,
 }
 
@@ -142,6 +149,10 @@ struct AddressResolverConfig {
     output: Option<PathBuf>,
     #[serde(default)]
     map_output: Option<PathBuf>,
+    #[serde(default)]
+    map_cache: Option<PathBuf>,
+    #[serde(default = "default_map_stale_after_secs")]
+    map_stale_after_secs: u64,
     #[serde(default)]
     geo: GeoConfig,
     #[serde(default)]
@@ -239,6 +250,12 @@ impl AddressResolverConfig {
                     .map_output
                     .as_ref()
                     .map(|path| resolve_config_path(&base_dir, path)),
+                map_cache: self
+                    .map_cache
+                    .as_ref()
+                    .map(|path| resolve_config_path(&base_dir, path))
+                    .or_else(|| default_map_cache_path(&base_dir, self.state.as_ref())),
+                map_stale_after_secs: self.map_stale_after_secs,
                 compact: self.compact,
             },
             interval_secs: self.interval_secs,
@@ -294,6 +311,10 @@ fn default_interval_secs() -> u64 {
 
 fn default_full_geo_refresh_secs() -> u64 {
     3600
+}
+
+fn default_map_stale_after_secs() -> u64 {
+    DEFAULT_MAP_STALE_AFTER_SECS
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -563,7 +584,13 @@ async fn run_collect(
 
     let mut map_nodes_count = None;
     if let Some(map_output_path) = args.map_output.as_deref() {
-        let map_nodes = build_map_nodes(&output, &geo_by_ip);
+        let map_nodes = build_cached_map_nodes(
+            &output,
+            &geo_by_ip,
+            args.map_cache.as_deref(),
+            Duration::from_secs(args.map_stale_after_secs),
+            output.generated_at,
+        )?;
         map_nodes_count = Some(map_nodes.len());
         let map_json = if args.compact {
             serde_json::to_string(&map_nodes)?
@@ -621,6 +648,13 @@ fn config_base_dir(path: &Path) -> PathBuf {
         .to_path_buf()
 }
 
+fn default_map_cache_path(base_dir: &Path, state: Option<&PathBuf>) -> Option<PathBuf> {
+    let state = state?;
+    let state_path = resolve_config_path(base_dir, state);
+    let parent = state_path.parent()?;
+    Some(parent.join("ton_map_cache.json"))
+}
+
 fn resolve_config_path(base_dir: &Path, path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -670,6 +704,7 @@ mod tests {
                 "state": "state/ton_nodes_state.json",
                 "output": "out/ton_full.json",
                 "map_output": "out/ton_nodes.json",
+                "map_stale_after_secs": 3600,
                 "compact": true,
                 "resolver": {
                     "kind": "ton-dht",
@@ -699,6 +734,11 @@ mod tests {
             args.collect.map_output.unwrap(),
             PathBuf::from("/srv/address_resolver/out/ton_nodes.json")
         );
+        assert_eq!(
+            args.collect.map_cache.unwrap(),
+            PathBuf::from("/srv/address_resolver/state/ton_map_cache.json")
+        );
+        assert_eq!(args.collect.map_stale_after_secs, 3600);
         assert_eq!(
             args.collect.geo_cache.unwrap(),
             PathBuf::from("/srv/address_resolver/state/ton_geo_cache.json")
