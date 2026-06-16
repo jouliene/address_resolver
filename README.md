@@ -1,9 +1,9 @@
 # address_resolver
 
-Standalone collector for validator network addresses used by `validators_clock` maps.
+Standalone collector for validator network addresses used by `validatorclock` maps.
 
 The collector reads the active validator set from
-`https://validatorsclock.xyz/api/chains/<chain>/clock`, normalizes
+`https://validatorclock.xyz/api/chains/<chain>/clock`, normalizes
 `validator_public_key -> adnl_addr`, resolves ADNL addresses through a resolver
 backend, and writes a JSON file. Network resolution is deliberately kept outside
 the website request path.
@@ -61,7 +61,7 @@ cargo run -- collect \
 ```
 
 `--map-output` writes the legacy array format expected by the current
-`validators_clock` map code. Each resolved validator is one row with exactly
+`validatorclock` map code. Each resolved validator is one row with exactly
 `peer`, `ip`, `city`, `country`, `isp`, `lat`, and `lon`. For TON, `peer` is the
 validator public key from the current validator set. If DHT returns multiple
 addresses for one validator, the exporter picks one canonical IP for this legacy
@@ -89,8 +89,8 @@ Default generated paths:
 
 - runtime state and geo cache: `./out/runtime`
 - stable map cache: `./out/runtime/ton_map_cache.json`
-- TON map output: `/home/admin/.validators_clock/ton_map/ton_nodes.json`
-- full resolver output: `/home/admin/.validators_clock/ton_map/ton_full.json`
+- TON map output: `/home/admin/.validatorclock/ton_map/ton_nodes.json`
+- full resolver output: `/home/admin/.validatorclock/ton_map/ton_full.json`
 
 To update an existing checkout and restart the user service:
 
@@ -137,7 +137,7 @@ target/release/address_resolver run --config /path/to/address_resolver.json
 The production shape is a long-running Rust collector plus the current Go
 `tonutils-go` DHT helper:
 
-- Rust binary: scheduling, validatorsclock.xyz API, output files, state, geo
+- Rust binary: scheduling, validatorclock.xyz API, output files, state, geo
   cache, and full refresh policy.
 - Go helper: low-level TON ADNL/DHT lookup backend, because `tonutils-go`
   already has a working network stack.
@@ -151,12 +151,12 @@ refresh checkpoint in the configured state file.
 The legacy map output is stabilized by `map_cache`. If a currently active TON
 validator is not found in one DHT pass, the collector keeps its last known map
 entry until `map_stale_after_secs` expires. The default is `3600` seconds, so a
-single failed lookup does not make `validators_clock` label the validator as
+single failed lookup does not make `validatorclock` label the validator as
 `FAKE NODE`.
 
 The state file is operational metadata only. If it is deleted, the next run will
 do a full geo refresh and recreate it. The map file is written atomically via a
-temporary file and rename, so `validators_clock` should never see a half-written
+temporary file and rename, so `validatorclock` should never see a half-written
 JSON file.
 
 Current observed result on a full TON map run:

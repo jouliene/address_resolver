@@ -29,7 +29,7 @@ struct Cli {
     #[arg(
         long,
         env = "VALIDATORS_CLOCK_BASE_URL",
-        default_value = "https://validatorsclock.xyz"
+        default_value = "https://validatorclock.xyz"
     )]
     base_url: String,
 
@@ -270,7 +270,7 @@ impl AddressResolverConfig {
 }
 
 fn default_base_url() -> String {
-    "https://validatorsclock.xyz".to_owned()
+    "https://validatorclock.xyz".to_owned()
 }
 
 fn default_chain() -> String {
@@ -722,7 +722,7 @@ mod tests {
 
         let args = config.to_collect_loop_args(Path::new("/srv/address_resolver/config.json"));
 
-        assert_eq!(config.base_url, "https://validatorsclock.xyz");
+        assert_eq!(config.base_url, "https://validatorclock.xyz");
         assert_eq!(args.collect.chain, "ton");
         assert_eq!(args.collect.resolver, ResolverKind::TonDht);
         assert_eq!(args.collect.ton_workers, 16);

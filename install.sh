@@ -24,7 +24,7 @@ done
 
 ROOT="$(pwd)"
 RUNTIME_DIR="${ADDRESS_RESOLVER_RUNTIME_DIR:-$ROOT/out/runtime}"
-MAP_DIR="${VALIDATORS_CLOCK_TON_MAP_DIR:-/home/admin/.validators_clock/ton_map}"
+MAP_DIR="${VALIDATORCLOCK_TON_MAP_DIR:-${VALIDATORS_CLOCK_TON_MAP_DIR:-$HOME/.validatorclock/ton_map}}"
 CONFIG_PATH="${ADDRESS_RESOLVER_CONFIG:-$ROOT/address_resolver.json}"
 SERVICE_NAME="${ADDRESS_RESOLVER_SERVICE_NAME:-address-resolver-ton.service}"
 BIN="$ROOT/target/release/address_resolver"
@@ -149,13 +149,67 @@ echo "building TON DHT helper"
   go build -o ton-dht-resolver .
 )
 
+migrate_existing_config() {
+  if ! command -v python3 >/dev/null; then
+    echo "warning: python3 not found; keeping existing config without legacy path migration" >&2
+    return
+  fi
+
+  python3 - "$CONFIG_PATH" <<'PY'
+import json
+import os
+import shutil
+import sys
+import time
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+
+with config_path.open("r", encoding="utf-8") as handle:
+    config = json.load(handle)
+
+replacements = (
+    ("https://validatorsclock.xyz", "https://validatorclock.xyz"),
+    ("http://validatorsclock.xyz", "http://validatorclock.xyz"),
+    (".validators_clock", ".validatorclock"),
+    ("validators_clock", "validatorclock"),
+)
+
+def migrate(value):
+    if isinstance(value, dict):
+        return {key: migrate(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [migrate(item) for item in value]
+    if isinstance(value, str):
+        migrated = value
+        for old, new in replacements:
+            migrated = migrated.replace(old, new)
+        return migrated
+    return value
+
+migrated = migrate(config)
+if migrated == config:
+    sys.exit(0)
+
+backup_path = config_path.with_name(f"{config_path.name}.bak-{int(time.time())}")
+shutil.copy2(config_path, backup_path)
+tmp_path = config_path.with_name(f".{config_path.name}.tmp")
+with tmp_path.open("w", encoding="utf-8") as handle:
+    json.dump(migrated, handle, indent=2)
+    handle.write("\n")
+os.replace(tmp_path, config_path)
+print(f"migrated legacy config strings; backup: {backup_path}")
+PY
+}
+
 if [[ -f "$CONFIG_PATH" ]]; then
   echo "keeping existing config: $CONFIG_PATH"
+  migrate_existing_config
 else
   echo "creating config: $CONFIG_PATH"
   cat > "$CONFIG_PATH" <<EOF_CONFIG
 {
-  "base_url": "https://validatorsclock.xyz",
+  "base_url": "https://validatorclock.xyz",
   "chain": "ton",
   "interval_secs": 300,
   "full_geo_refresh_secs": 3600,
